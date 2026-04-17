@@ -6,7 +6,7 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # --- 1. DESIGN & HIGH-END THEMING ---
-st.set_page_config(page_title="Neural Link v2.8", page_icon="💠", layout="wide")
+st.set_page_config(page_title="Neural Link v2.9", page_icon="💠", layout="wide")
 
 st.markdown("""
     <style>
@@ -27,11 +27,16 @@ else:
     st.error("Missing GEMINI_API_KEY in Secrets.")
     st.stop()
 
-# --- 3. DATABASE CONNECTION ---
+# --- 3. DATABASE CONNECTION (v2.9 - Verbose Mode) ---
+conn = None
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    st.sidebar.error("Cloud Sync Pending...")
+    # Test read to verify permissions
+    test_read = conn.read(worksheet="Agent_Memory", ttl=0)
+    st.sidebar.success("✅ Cloud Memory Linked")
+except Exception as e:
+    st.sidebar.error(f"❌ Sync Error: {str(e)}")
+    st.sidebar.info("Check if 'Agent_Memory' tab exists and sheet is shared with Service Account email.")
 
 # --- 4. SESSION & COMPACT MEMORY ---
 if "session_id" not in st.session_state:
@@ -40,6 +45,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 def save_to_cloud():
+    if conn is None: return
     try:
         compact_json = json.dumps(st.session_state.messages)
         new_row = pd.DataFrame([{"Session_ID": st.session_state.session_id, "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), "Chat_Blob": compact_json}])
@@ -50,12 +56,12 @@ def save_to_cloud():
         except:
             updated_history = new_row
         conn.update(worksheet="Agent_Memory", data=updated_history)
-    except: pass
+    except Exception as e:
+        st.sidebar.warning(f"Save Failed: {str(e)}")
 
-# --- 5. THE 2026 NEURAL ENGINE (v2.8) ---
+# --- 5. THE 2026 NEURAL ENGINE (v2.9) ---
 def get_gemini_response(user_text, system_instruction, temp):
-    # 2026 UPDATE: Switched to gemini-3-flash-preview (gemini-1.5 is shut down)
-    # Using v1beta endpoint for the latest 2026 features
+    # Using the latest April 2026 stable endpoint
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
     
     session = requests.Session()
@@ -83,15 +89,22 @@ def get_gemini_response(user_text, system_instruction, temp):
 
 # --- 6. UI ---
 st.title("💠 AGENT NEURAL LINK")
-st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 3 Flash (v2.8)<br><b>Protocol:</b> 2026 High-Performance Link</div>", unsafe_allow_html=True)
+st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 3 Flash (v2.9)<br><b>Cloud Sync:</b> Active Session Protocol</div>", unsafe_allow_html=True)
 
 sys_prompt = st.sidebar.text_area("System Persona", "You are a creative strategist.")
 temp = st.sidebar.slider("Creativity", 0.0, 1.0, 0.7)
 
+if st.sidebar.button("🗑️ Wipe Session Memory"):
+    st.session_state.messages = []
+    st.session_state.session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    st.rerun()
+
+# Display Chat
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
+# Interaction
 user_query = st.chat_input("Enter command...")
 if user_query:
     with st.chat_message("user"): st.markdown(user_query)
