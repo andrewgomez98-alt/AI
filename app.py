@@ -6,7 +6,7 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # --- 1. DESIGN & HIGH-END THEMING ---
-st.set_page_config(page_title="Neural Link v2.6", page_icon="💠", layout="wide")
+st.set_page_config(page_title="Neural Link v2.7", page_icon="💠", layout="wide")
 
 st.markdown("""
     <style>
@@ -20,7 +20,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. THE 2026 DIRECT ENGINE ---
+# --- 2. AUTHENTICATION ---
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
@@ -52,13 +52,17 @@ def save_to_cloud():
         conn.update(worksheet="Agent_Memory", data=updated_history)
     except: pass
 
-# --- 5. THE BYPASS ENGINE ---
+# --- 5. THE CLEAN SESSION ENGINE (v2.7) ---
 def get_gemini_response(user_text, system_instruction, temp):
-    # UPDATED FOR APRIL 2026: Using v1 stable and Gemini 3.1 Flash
-    model_name = "gemini-3.1-flash" 
-    url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={API_KEY}"
+    # Using 'v1' and the most stable model name for 2026
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
     
-    headers = {"Content-Type": "application/json"}
+    # We create a brand new request session to ENSURE no YouTube credentials leak in
+    session = requests.Session()
+    session.headers.clear() # This kills the spreadsheet 'badge'
+    
+    params = {'key': API_KEY}
+    headers = {'Content-Type': 'application/json'}
     
     contents = []
     for msg in st.session_state.messages:
@@ -70,17 +74,17 @@ def get_gemini_response(user_text, system_instruction, temp):
     
     payload = {"contents": contents, "generationConfig": {"temperature": temp}}
     
-    # We use a clean request to avoid any background cookie interference
-    response = requests.post(url, headers=headers, json=payload)
+    # Executing the isolated request
+    response = session.post(url, params=params, json=payload, headers=headers)
     
     if response.status_code == 200:
         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
     else:
-        return f"CRITICAL AUTH ERROR: {response.status_code}. Google is rejecting the project key. Ensure Gemini API is ENABLED in Cloud Console."
+        return f"NEURAL ERROR {response.status_code}: {response.text}"
 
 # --- 6. UI ---
 st.title("💠 AGENT NEURAL LINK")
-st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 3.1 Flash (v2.6)<br><b>Handshake:</b> Direct URL Bypass</div>", unsafe_allow_html=True)
+st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 1.5 Flash (v2.7)<br><b>Isolation:</b> Clean Session Protocol</div>", unsafe_allow_html=True)
 
 sys_prompt = st.sidebar.text_area("System Persona", "You are a creative strategist.")
 temp = st.sidebar.slider("Creativity", 0.0, 1.0, 0.7)
@@ -93,10 +97,10 @@ user_query = st.chat_input("Enter command...")
 if user_query:
     with st.chat_message("user"): st.markdown(user_query)
     with st.chat_message("assistant"):
-        with st.spinner("Bypassing Auth Gate..."):
+        with st.spinner("Isolating Neural Path..."):
             reply = get_gemini_response(user_query, sys_prompt, temp)
             st.markdown(f"<span style='color:#00FBFF;'>●</span> {reply}", unsafe_allow_html=True)
-            if "CRITICAL AUTH" not in reply:
+            if "NEURAL ERROR" not in reply:
                 st.session_state.messages.append({"role": "user", "content": user_query})
                 st.session_state.messages.append({"role": "assistant", "content": reply})
                 save_to_cloud()
