@@ -6,7 +6,7 @@ from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
 # --- 1. DESIGN & HIGH-END THEMING ---
-st.set_page_config(page_title="Neural Link v2.7", page_icon="💠", layout="wide")
+st.set_page_config(page_title="Neural Link v2.8", page_icon="💠", layout="wide")
 
 st.markdown("""
     <style>
@@ -52,14 +52,14 @@ def save_to_cloud():
         conn.update(worksheet="Agent_Memory", data=updated_history)
     except: pass
 
-# --- 5. THE CLEAN SESSION ENGINE (v2.7) ---
+# --- 5. THE 2026 NEURAL ENGINE (v2.8) ---
 def get_gemini_response(user_text, system_instruction, temp):
-    # Using 'v1' and the most stable model name for 2026
-    url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+    # 2026 UPDATE: Switched to gemini-3-flash-preview (gemini-1.5 is shut down)
+    # Using v1beta endpoint for the latest 2026 features
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
     
-    # We create a brand new request session to ENSURE no YouTube credentials leak in
     session = requests.Session()
-    session.headers.clear() # This kills the spreadsheet 'badge'
+    session.headers.clear() 
     
     params = {'key': API_KEY}
     headers = {'Content-Type': 'application/json'}
@@ -74,7 +74,6 @@ def get_gemini_response(user_text, system_instruction, temp):
     
     payload = {"contents": contents, "generationConfig": {"temperature": temp}}
     
-    # Executing the isolated request
     response = session.post(url, params=params, json=payload, headers=headers)
     
     if response.status_code == 200:
@@ -84,7 +83,7 @@ def get_gemini_response(user_text, system_instruction, temp):
 
 # --- 6. UI ---
 st.title("💠 AGENT NEURAL LINK")
-st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 1.5 Flash (v2.7)<br><b>Isolation:</b> Clean Session Protocol</div>", unsafe_allow_html=True)
+st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 3 Flash (v2.8)<br><b>Protocol:</b> 2026 High-Performance Link</div>", unsafe_allow_html=True)
 
 sys_prompt = st.sidebar.text_area("System Persona", "You are a creative strategist.")
 temp = st.sidebar.slider("Creativity", 0.0, 1.0, 0.7)
@@ -97,7 +96,7 @@ user_query = st.chat_input("Enter command...")
 if user_query:
     with st.chat_message("user"): st.markdown(user_query)
     with st.chat_message("assistant"):
-        with st.spinner("Isolating Neural Path..."):
+        with st.spinner("Connecting to 2026 Neural Net..."):
             reply = get_gemini_response(user_query, sys_prompt, temp)
             st.markdown(f"<span style='color:#00FBFF;'>●</span> {reply}", unsafe_allow_html=True)
             if "NEURAL ERROR" not in reply:
