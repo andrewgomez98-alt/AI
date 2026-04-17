@@ -13,7 +13,7 @@ git clone [https://github.com/your-username/my-ai-agent.git](https://github.com/
 pip install -r requirements.txt
 
 # Add your API Key to .env
-echo "OPENAI_API_KEY=your_key_here" > .env
+echo "AQ.Ab8RN6J0vm074QKM-TY3kWBOKb8w41zZ2_WAvHmTavLzcQPUHg" > .env
 
 # Run the agent
 python main.py
