@@ -1,19 +1,13 @@
-# 🤖 My-AI-Agent
+# 🤖 Agent Neural Link | v1.0.0
+### A High-End AI Prompt Portal
 
-> An autonomous agent built to streamline [specific workflow, e.g., video scripting, research, or coding].
+**Developed for:** RelAXE Neural Systems  
+**Core Model:** Gemini 3 Flash  
+**Aesthetic:** Cyan / Dark Grey / Obsidian
 
 ---
 
-## 🚀 Quick Start
-```bash
-# Clone the repository
-git clone [https://github.com/your-username/my-ai-agent.git](https://github.com/your-username/my-ai-agent.git)
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Add your API Key to .env
-echo "AQ.Ab8RN6J0vm074QKM-TY3kWBOKb8w41zZ2_WAvHmTavLzcQPUHg" > .env
-
-# Run the agent
-python main.py
+## 🛠️ Features
+* **Custom Neural Link:** Direct access to Gemini 3 Flash.
+* **Prompt Portal:** Sidebar control for system instructions and creativity (temperature).
+* **High-End UI:** Custom obsidian and cyan interface.
