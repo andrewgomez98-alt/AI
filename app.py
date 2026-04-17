@@ -5,8 +5,8 @@ import json
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. DESIGN & HIGH-END THEMING ---
-st.set_page_config(page_title="Neural Link Direct", page_icon="💠", layout="wide")
+# --- 1. DESIGN & HIGH-END THEMING (CYAN & OBSIDIAN) ---
+st.set_page_config(page_title="Neural Link v2.5", page_icon="💠", layout="wide")
 
 st.markdown("""
     <style>
@@ -25,15 +25,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. DIRECT PIPELINE SETUP ---
-# We grab the key, but we don't use the Google library to apply it.
+# --- 2. AUTHENTICATION ---
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
     st.error("Missing GEMINI_API_KEY in Secrets.")
     st.stop()
 
-# --- 3. DATABASE CONNECTION (Now safely isolated) ---
+# --- 3. DATABASE CONNECTION ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception:
@@ -64,18 +63,24 @@ def save_to_cloud():
     except:
         pass
 
-# --- 5. THE CUSTOM AI ENGINE ---
+# --- 5. THE IRON-CLAD AI ENGINE (Fixed for 2026 Models & Security) ---
 def get_gemini_response(user_text, system_instruction, temp):
-    # This URL bypasses all local credentials and sends the key directly
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+    # 2026 UPDATE: gemini-1.5 is officially retired. We are now using Gemini 3.
+    model_name = "gemini-3-flash" 
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
     
-    # Build the history for the API
+    # Header-based auth is the ONLY way to bypass the 'ACCESS_TOKEN_TYPE_UNSUPPORTED' conflict.
+    # It tells Google: "I am using an API Key, ignore any other login badges."
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": API_KEY 
+    }
+    
     contents = []
     for msg in st.session_state.messages:
         role = "user" if msg["role"] == "user" else "model"
         contents.append({"role": role, "parts": [{"text": msg["content"]}]})
     
-    # Add the current prompt with system instructions
     full_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\nUSER PROMPT: {user_text}"
     contents.append({"role": "user", "parts": [{"text": full_prompt}]})
     
@@ -84,17 +89,18 @@ def get_gemini_response(user_text, system_instruction, temp):
         "generationConfig": {"temperature": temp}
     }
     
-    # Make the direct web request
-    response = requests.post(url, json=payload)
+    # The direct HTTP POST ensures we don't pick up hidden environment variables
+    response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code == 200:
         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
     else:
+        # We return the exact status to help us pinpoint any final cloud settings
         return f"API ERROR {response.status_code}: {response.text}"
 
 # --- 6. UI LAYOUT ---
 st.title("💠 AGENT NEURAL LINK")
-st.markdown("<div class='portal-card'><b>Neural Engine:</b> Direct API Pipeline<br><b>Status:</b> Online & Isolated</div>", unsafe_allow_html=True)
+st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 3 Flash (v2.5 - Iron Clad)<br><b>Security:</b> Header-Isolated Handshake</div>", unsafe_allow_html=True)
 
 # Sidebar
 st.sidebar.header("⚙️ Neural Config")
@@ -119,13 +125,11 @@ if user_query:
         st.markdown(user_query)
     
     with st.chat_message("assistant"):
-        with st.spinner("Processing directly..."):
-            # Call our custom function
+        with st.spinner("Processing through Iron-Clad Link..."):
             reply = get_gemini_response(user_query, sys_prompt, temp)
             
             st.markdown(f"<span style='color:#00FBFF;'>●</span> {reply}", unsafe_allow_html=True)
             
-            # Save if successful
             if "API ERROR" not in reply:
                 st.session_state.messages.append({"role": "user", "content": user_query})
                 st.session_state.messages.append({"role": "assistant", "content": reply})
@@ -133,4 +137,4 @@ if user_query:
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.caption(f"Neural Link Direct | {st.session_state.session_id}")
+st.sidebar.caption(f"Neural Link v2.5 | {st.session_state.session_id}")
