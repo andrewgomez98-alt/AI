@@ -1,118 +1,200 @@
 import streamlit as st
 import requests
 import pandas as pd
-import json
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-# --- 1. DESIGN & HIGH-END THEMING ---
-st.set_page_config(page_title="Neural Link v2.9", page_icon="💠", layout="wide")
+# --- 1. HIGH-END MOUNTAIN-CYBER AESTHETIC ---
+st.set_page_config(page_title="Neural Link v3.0", page_icon="💠", layout="wide")
 
 st.markdown("""
     <style>
-        .stApp { background-color: #050505; color: #E0E0E0; }
-        [data-testid="stSidebar"] { background-color: #0E1117; border-right: 1px solid #00FBFF33; }
-        [data-testid="stChatMessage"] { background-color: #111; border-radius: 12px; border: 1px solid #333; margin-bottom: 12px; }
-        .stTextInput > div > div > input { background-color: #1E1E1E !important; color: #00FBFF !important; border: 1px solid #333 !important; }
-        .stButton > button { background-color: transparent; color: #00FBFF; border: 2px solid #00FBFF; border-radius: 8px; width: 100%; transition: 0.3s; }
-        .stButton > button:hover { background-color: #00FBFF; color: #000; box-shadow: 0 0 20px #00FBFF; }
-        .portal-card { background-color: #111; padding: 25px; border-radius: 15px; border-left: 5px solid #00FBFF; margin-bottom: 25px; }
+    /* Main Background */
+    .stApp {
+        background-color: #0E1117;
+        color: #E0E0E0;
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #161B22 !important;
+        border-right: 1px solid #00FBFF33;
+    }
+
+    /* Chat Messages */
+    [data-testid="stChatMessage"] {
+        background-color: #161B22;
+        border-radius: 15px;
+        border: 1px solid #30363D;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+
+    /* Input Field */
+    .stTextInput > div > div > input {
+        background-color: #1E1E1E !important;
+        color: #00FBFF !important;
+        border: 1px solid #00FBFF33 !important;
+    }
+
+    /* Custom KPI Cards for Session Info */
+    .portal-card {
+        background: rgba(22, 27, 34, 0.8);
+        border-left: 5px solid #00FBFF;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    /* Buttons */
+    .stButton>button {
+        background-color: transparent !important;
+        color: #00FBFF !important;
+        border: 1px solid #00FBFF !important;
+        border-radius: 8px !important;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #00FBFF !important;
+        color: #000 !important;
+        box-shadow: 0 0 15px #00FBFF;
+    }
+
+    /* Headers */
+    h1, h2, h3 {
+        color: #00FBFF !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. AUTHENTICATION ---
+# --- 2. AUTHENTICATION & DATABASE ---
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
     st.error("Missing GEMINI_API_KEY in Secrets.")
     st.stop()
 
-# --- 3. DATABASE CONNECTION (v2.9 - Verbose Mode) ---
-conn = None
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # Test read to verify permissions
-    test_read = conn.read(worksheet="Agent_Memory", ttl=0)
-    st.sidebar.success("✅ Cloud Memory Linked")
-except Exception as e:
-    st.sidebar.error(f"❌ Sync Error: {str(e)}")
-    st.sidebar.info("Check if 'Agent_Memory' tab exists and sheet is shared with Service Account email.")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- 4. SESSION & COMPACT MEMORY ---
+# --- 3. SESSION MANAGEMENT ---
 if "session_id" not in st.session_state:
     st.session_state.session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-def save_to_cloud():
+    # LOAD MEMORY FROM CLOUD ON STARTUP
+    try:
+        memory_df = conn.read(worksheet="Agent_Memory", ttl=0)
+        if not memory_df.empty:
+            # Filter for current session if you want to resume, 
+            # or keep empty for a fresh start while saving to the same sheet.
+            # Here, we filter for the existing session if it matches.
+            session_mem = memory_df[memory_df['Session_ID'] == st.session_state.session_id]
+            for _, row in session_mem.iterrows():
+                st.session_state.messages.append({"role": row['Role'], "content": row['Content']})
+    except:
+        pass
+
+def save_message_to_cloud(role, content):
+    """Saves a single message as a new row to prevent character limit errors."""
     if conn is None: return
     try:
-        compact_json = json.dumps(st.session_state.messages)
-        new_row = pd.DataFrame([{"Session_ID": st.session_state.session_id, "Date": datetime.now().strftime("%Y-%m-%d %H:%M"), "Chat_Blob": compact_json}])
+        new_entry = pd.DataFrame([{
+            "Session_ID": st.session_state.session_id,
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Role": role,
+            "Content": content
+        }])
+
+        # Pull existing, append new, and update
         try:
-            full_history = conn.read(worksheet="Agent_Memory", ttl=0)
-            clean_history = full_history[full_history['Session_ID'] != st.session_state.session_id]
-            updated_history = pd.concat([clean_history, new_row], ignore_index=True)
+            history = conn.read(worksheet="Agent_Memory", ttl=0)
+            updated_history = pd.concat([history, new_entry], ignore_index=True)
         except:
-            updated_history = new_row
+            updated_history = new_entry
+
         conn.update(worksheet="Agent_Memory", data=updated_history)
     except Exception as e:
-        st.sidebar.warning(f"Save Failed: {str(e)}")
+        st.sidebar.warning(f"Cloud Sync Lag: {str(e)}")
 
-# --- 5. THE 2026 NEURAL ENGINE (v2.9) ---
+# --- 4. NEURAL ENGINE (Gemini 1.5 Flash) ---
 def get_gemini_response(user_text, system_instruction, temp):
-    # Using the latest April 2026 stable endpoint
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
-    
-    session = requests.Session()
-    session.headers.clear() 
-    
-    params = {'key': API_KEY}
+    # Using the current stable 1.5 Flash endpoint
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+
     headers = {'Content-Type': 'application/json'}
-    
+
     contents = []
+    # Add history for context
     for msg in st.session_state.messages:
         role = "user" if msg["role"] == "user" else "model"
         contents.append({"role": role, "parts": [{"text": msg["content"]}]})
-    
-    full_prompt = f"INSTRUCTION: {system_instruction}\n\nUSER: {user_text}"
-    contents.append({"role": "user", "parts": [{"text": full_prompt}]})
-    
-    payload = {"contents": contents, "generationConfig": {"temperature": temp}}
-    
-    response = session.post(url, params=params, json=payload, headers=headers)
-    
+
+    # Add current instruction and query
+    contents.append({
+        "role": "user", 
+        "parts": [{"text": f"SYSTEM INSTRUCTION: {system_instruction}\n\nUSER: {user_text}"}]
+    })
+
+    payload = {
+        "contents": contents,
+        "generationConfig": {"temperature": temp, "maxOutputTokens": 2048}
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+
     if response.status_code == 200:
         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
     else:
         return f"NEURAL ERROR {response.status_code}: {response.text}"
 
-# --- 6. UI ---
-st.title("💠 AGENT NEURAL LINK")
-st.markdown("<div class='portal-card'><b>Neural Engine:</b> Gemini 3 Flash (v2.9)<br><b>Cloud Sync:</b> Active Session Protocol</div>", unsafe_allow_html=True)
+# --- 5. UI LAYOUT ---
+with st.sidebar:
+    st.markdown("<h1 style='text-align: center;'>💠 NEURAL LINK</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #8B949E;'>v3.0 Atomic Memory Protocol</p>", unsafe_allow_html=True)
+    st.divider()
 
-sys_prompt = st.sidebar.text_area("System Persona", "You are a creative strategist.")
-temp = st.sidebar.slider("Creativity", 0.0, 1.0, 0.7)
+    sys_prompt = st.text_area("System Persona", "You are a creative strategist focused on high-growth content and efficient production.")
+    temp = st.slider("Neural Temperature", 0.0, 1.0, 0.7)
 
-if st.sidebar.button("🗑️ Wipe Session Memory"):
-    st.session_state.messages = []
-    st.session_state.session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-    st.rerun()
+    st.divider()
+    if st.button("🗑️ PURGE SESSION"):
+        st.session_state.messages = []
+        st.session_state.session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        st.rerun()
 
-# Display Chat
+st.title("💠 Agent Neural Link")
+st.markdown(f"""
+    <div class='portal-card'>
+        <b>Active Session:</b> {st.session_state.session_id}<br>
+        <b>Memory Protocol:</b> Atomic Row Storage (Character Limit Fix Active)
+    </div>
+    """, unsafe_allow_html=True)
+
+# Display Chat History
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Interaction
-user_query = st.chat_input("Enter command...")
+# User Interaction
+user_query = st.chat_input("Send a command to the neural net...")
+
 if user_query:
-    with st.chat_message("user"): st.markdown(user_query)
+    # 1. Display User Message
+    with st.chat_message("user"):
+        st.markdown(user_query)
+
+    # 2. Save User Message to Cloud immediately
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    save_message_to_cloud("user", user_query)
+
+    # 3. Get and Display AI Response
     with st.chat_message("assistant"):
-        with st.spinner("Connecting to 2026 Neural Net..."):
+        with st.spinner("Processing through Neural Layers..."):
             reply = get_gemini_response(user_query, sys_prompt, temp)
-            st.markdown(f"<span style='color:#00FBFF;'>●</span> {reply}", unsafe_allow_html=True)
+            st.markdown(reply)
+
             if "NEURAL ERROR" not in reply:
-                st.session_state.messages.append({"role": "user", "content": user_query})
                 st.session_state.messages.append({"role": "assistant", "content": reply})
-                save_to_cloud()
+                # 4. Save AI Response to Cloud immediately
+                save_message_to_cloud("assistant", reply)
