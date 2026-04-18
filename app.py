@@ -88,7 +88,6 @@ if "messages" not in st.session_state:
         if not memory_df.empty:
             # Filter for current session if you want to resume, 
             # or keep empty for a fresh start while saving to the same sheet.
-            # Here, we filter for the existing session if it matches.
             session_mem = memory_df[memory_df['Session_ID'] == st.session_state.session_id]
             for _, row in session_mem.iterrows():
                 st.session_state.messages.append({"role": row['Role'], "content": row['Content']})
@@ -117,10 +116,10 @@ def save_message_to_cloud(role, content):
     except Exception as e:
         st.sidebar.warning(f"Cloud Sync Lag: {str(e)}")
 
-# --- 4. NEURAL ENGINE (Gemini 1.5 Flash) ---
+# --- 4. NEURAL ENGINE (Gemini API Updated) ---
 def get_gemini_response(user_text, system_instruction, temp):
-    # Using the current stable 1.5 Flash endpoint
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+    # Updated to the currently supported 2.5 Flash endpoint to fix 404 error
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
 
     headers = {'Content-Type': 'application/json'}
 
