@@ -153,7 +153,11 @@ with st.sidebar:
     st.markdown("<p style='text-align: center; color: #8B949E;'>v3.0 Atomic Memory Protocol</p>", unsafe_allow_html=True)
     st.divider()
 
-    sys_prompt = st.text_area("System Persona", "You are a creative strategist focused on high-growth content and efficient production.")
+    # UPDATED: System Persona is now configured to act as an elite personal assistant.
+    sys_prompt = st.text_area(
+        "System Persona", 
+        "You are an elite, highly organized personal assistant. Your primary goal is to help me manage my schedule, optimize my daily tasks, solve problems efficiently, and provide clear, actionable advice. Keep your tone professional, concise, and helpful."
+    )
     temp = st.slider("Neural Temperature", 0.0, 1.0, 0.7)
 
     st.divider()
@@ -197,3 +201,4 @@ if user_query:
                 st.session_state.messages.append({"role": "assistant", "content": reply})
                 # 4. Save AI Response to Cloud immediately
                 save_message_to_cloud("assistant", reply)
+            
