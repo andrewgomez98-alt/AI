@@ -86,8 +86,6 @@ if "messages" not in st.session_state:
     try:
         memory_df = conn.read(worksheet="Agent_Memory", ttl=0)
         if not memory_df.empty:
-            # Filter for current session if you want to resume, 
-            # or keep empty for a fresh start while saving to the same sheet.
             session_mem = memory_df[memory_df['Session_ID'] == st.session_state.session_id]
             for _, row in session_mem.iterrows():
                 st.session_state.messages.append({"role": row['Role'], "content": row['Content']})
@@ -105,7 +103,6 @@ def save_message_to_cloud(role, content):
             "Content": content
         }])
 
-        # Pull existing, append new, and update
         try:
             history = conn.read(worksheet="Agent_Memory", ttl=0)
             updated_history = pd.concat([history, new_entry], ignore_index=True)
@@ -117,17 +114,19 @@ def save_message_to_cloud(role, content):
         st.sidebar.warning(f"Cloud Sync Lag: {str(e)}")
 
 # --- 4. NEURAL ENGINE (Gemini API Updated) ---
-def get_gemini_response(user_text, system_instruction, temp):
-    # Updated to the currently supported 2.5 Flash endpoint to fix 404 error
+def get_gemini_response(user_text, system_instruction, temp, document_context=""):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
-
     headers = {'Content-Type': 'application/json'}
-
     contents = []
+
     # Add history for context
     for msg in st.session_state.messages:
         role = "user" if msg["role"] == "user" else "model"
         contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+
+    # Inject document context into the system instructions if a document is uploaded
+    if document_context:
+        system_instruction += f"\n\n=== UPLOADED DOCUMENT CONTEXT ===\n{document_context}\n================================="
 
     # Add current instruction and query
     contents.append({
@@ -137,7 +136,8 @@ def get_gemini_response(user_text, system_instruction, temp):
 
     payload = {
         "contents": contents,
-        "generationConfig": {"temperature": temp, "maxOutputTokens": 2048}
+        # Max Output Tokens significantly increased here to prevent mid-sentence cut-offs
+        "generationConfig": {"temperature": temp, "maxOutputTokens": 8192} 
     }
 
     response = requests.post(url, json=payload, headers=headers)
@@ -153,12 +153,25 @@ with st.sidebar:
     st.markdown("<p style='text-align: center; color: #8B949E;'>v3.0 Atomic Memory Protocol</p>", unsafe_allow_html=True)
     st.divider()
 
-    # UPDATED: System Persona is now configured to act as an elite personal assistant.
     sys_prompt = st.text_area(
         "System Persona", 
         "You are an elite, highly organized personal assistant. Your primary goal is to help me manage my schedule, optimize my daily tasks, solve problems efficiently, and provide clear, actionable advice. Keep your tone professional, concise, and helpful."
     )
     temp = st.slider("Neural Temperature", 0.0, 1.0, 0.7)
+
+    st.divider()
+    
+    # NEW FEATURE: Temporary Document Upload
+    st.subheader("📎 Temporary Knowledge Base")
+    st.markdown("<p style='color: #8B949E; font-size: 12px;'>Upload TXT, CSV, or MD files for temporary AI context.</p>", unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Upload File", type=['txt', 'csv', 'md'], label_visibility="collapsed")
+    doc_text = ""
+    if uploaded_file:
+        try:
+            doc_text = uploaded_file.getvalue().decode("utf-8")
+            st.success("Document loaded into Neural RAM.")
+        except Exception as e:
+            st.error("Format error. Please ensure it is plain text.")
 
     st.divider()
     if st.button("🗑️ PURGE SESSION"):
@@ -170,7 +183,7 @@ st.title("💠 Agent Neural Link")
 st.markdown(f"""
     <div class='portal-card'>
         <b>Active Session:</b> {st.session_state.session_id}<br>
-        <b>Memory Protocol:</b> Atomic Row Storage (Character Limit Fix Active)
+        <b>Memory Protocol:</b> Atomic Row Storage
     </div>
     """, unsafe_allow_html=True)
 
@@ -187,17 +200,4 @@ if user_query:
     with st.chat_message("user"):
         st.markdown(user_query)
 
-    # 2. Save User Message to Cloud immediately
-    st.session_state.messages.append({"role": "user", "content": user_query})
-    save_message_to_cloud("user", user_query)
-
-    # 3. Get and Display AI Response
-    with st.chat_message("assistant"):
-        with st.spinner("Processing through Neural Layers..."):
-            reply = get_gemini_response(user_query, sys_prompt, temp)
-            st.markdown(reply)
-
-            if "NEURAL ERROR" not in reply:
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-                # 4. Save AI Response to Cloud immediately
-                save_message_to_cloud("assistant", reply)
+    # 2. Save User
