@@ -3,8 +3,6 @@ import requests
 import pandas as pd
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
-import base64 # Needed for encoding images for Gemini API
-import mimetypes # To infer mime type from file extension if needed, though st.file_uploader often provides it
 
 # --- 1. HIGH-END MOUNTAIN-CYBER AESTHETIC ---
 st.set_page_config(page_title="Neural Link v3.0", page_icon="💠", layout="wide")
@@ -31,43 +29,12 @@ st.markdown("""
         margin-bottom: 10px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
-    /* User message specific styling */
-    [data-testid="stChatMessage"].st-emotion-cache-1c7y2k2 { /* This class might vary slightly based on Streamlit version */
-        background-color: #202B37;
-    }
 
     /* Input Field */
     .stTextInput > div > div > input {
         background-color: #1E1E1E !important;
         color: #00FBFF !important;
         border: 1px solid #00FBFF33 !important;
-    }
-
-    /* File Uploader styling */
-    .stFileUploader > div > div { /* Target the inner container of the uploader */
-        background-color: #1E1E1E !important;
-        border: 1px solid #00FBFF33 !important;
-        border-radius: 8px !important;
-        color: #00FBFF !important;
-        padding: 5px; /* Adjust padding for better look */
-    }
-    .stFileUploader > div > div > button { /* Target the browse button */
-        background-color: transparent !important;
-        color: #00FBFF !important;
-        border: 1px solid #00FBFF !important;
-        border-radius: 8px !important;
-        transition: 0.3s;
-    }
-    .stFileUploader > div > div > button:hover {
-        background-color: #00FBFF !important;
-        color: #000 !important;
-        box-shadow: 0 0 10px #00FBFF;
-    }
-    .stFileUploader > div > div > div > span { /* Text like "No file uploaded" */
-        color: #00FBFF !important;
-    }
-    .stFileUploader > div > div > div > p { /* File name after upload */
-        color: #E0E0E0 !important;
     }
 
     /* Custom KPI Cards for Session Info */
@@ -104,7 +71,7 @@ st.markdown("""
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
-    st.error("Missing GEMINI_API_KEY in Secrets. Please add it to your Streamlit secrets.")
+    st.error("Missing GEMINI_API_KEY in Secrets.")
     st.stop()
 
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -114,17 +81,123 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 if "messages" not in st.session_state:
     st.session_state.messages = []
-# NEW: Initialize a place to store uploaded attachments for the current turn
-if "current_attachments" not in st.session_state:
-    st.session_state.current_attachments = []
 
     # LOAD MEMORY FROM CLOUD ON STARTUP
     try:
         memory_df = conn.read(worksheet="Agent_Memory", ttl=0)
         if not memory_df.empty:
-            # Filter for current session if you want to resume,
+            # Filter for current session if you want to resume, 
             # or keep empty for a fresh start while saving to the same sheet.
-            # NOTE: Attachments are NOT loaded from GSheets, only text.
             session_mem = memory_df[memory_df['Session_ID'] == st.session_state.session_id]
             for _, row in session_mem.iterrows():
-                # If you stored image placeholders, you might
+                st.session_state.messages.append({"role": row['Role'], "content": row['Content']})
+    except:
+        pass
+
+def save_message_to_cloud(role, content):
+    """Saves a single message as a new row to prevent character limit errors."""
+    if conn is None: return
+    try:
+        new_entry = pd.DataFrame([{
+            "Session_ID": st.session_state.session_id,
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Role": role,
+            "Content": content
+        }])
+
+        # Pull existing, append new, and update
+        try:
+            history = conn.read(worksheet="Agent_Memory", ttl=0)
+            updated_history = pd.concat([history, new_entry], ignore_index=True)
+        except:
+            updated_history = new_entry
+
+        conn.update(worksheet="Agent_Memory", data=updated_history)
+    except Exception as e:
+        st.sidebar.warning(f"Cloud Sync Lag: {str(e)}")
+
+# --- 4. NEURAL ENGINE (Gemini API Updated) ---
+def get_gemini_response(user_text, system_instruction, temp):
+    # Updated to the currently supported 2.5 Flash endpoint to fix 404 error
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+
+    headers = {'Content-Type': 'application/json'}
+
+    contents = []
+    # Add history for context
+    for msg in st.session_state.messages:
+        role = "user" if msg["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+
+    # Add current instruction and query
+    contents.append({
+        "role": "user", 
+        "parts": [{"text": f"SYSTEM INSTRUCTION: {system_instruction}\n\nUSER: {user_text}"}]
+    })
+
+    payload = {
+        "contents": contents,
+        "generationConfig": {"temperature": temp, "maxOutputTokens": 2048}
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+    else:
+        return f"NEURAL ERROR {response.status_code}: {response.text}"
+
+# --- 5. UI LAYOUT ---
+with st.sidebar:
+    st.markdown("<h1 style='text-align: center;'>💠 NEURAL LINK</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #8B949E;'>v3.0 Atomic Memory Protocol</p>", unsafe_allow_html=True)
+    st.divider()
+
+    # UPDATED: System Persona is now configured to act as an elite personal assistant.
+    sys_prompt = st.text_area(
+        "System Persona", 
+        "You are an elite, highly organized personal assistant. Your primary goal is to help me manage my schedule, optimize my daily tasks, solve problems efficiently, and provide clear, actionable advice. Keep your tone professional, concise, and helpful."
+    )
+    temp = st.slider("Neural Temperature", 0.0, 1.0, 0.7)
+
+    st.divider()
+    if st.button("🗑️ PURGE SESSION"):
+        st.session_state.messages = []
+        st.session_state.session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        st.rerun()
+
+st.title("💠 Agent Neural Link")
+st.markdown(f"""
+    <div class='portal-card'>
+        <b>Active Session:</b> {st.session_state.session_id}<br>
+        <b>Memory Protocol:</b> Atomic Row Storage (Character Limit Fix Active)
+    </div>
+    """, unsafe_allow_html=True)
+
+# Display Chat History
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
+
+# User Interaction
+user_query = st.chat_input("Send a command to the neural net...")
+
+if user_query:
+    # 1. Display User Message
+    with st.chat_message("user"):
+        st.markdown(user_query)
+
+    # 2. Save User Message to Cloud immediately
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    save_message_to_cloud("user", user_query)
+
+    # 3. Get and Display AI Response
+    with st.chat_message("assistant"):
+        with st.spinner("Processing through Neural Layers..."):
+            reply = get_gemini_response(user_query, sys_prompt, temp)
+            st.markdown(reply)
+
+            if "NEURAL ERROR" not in reply:
+                st.session_state.messages.append({"role": "assistant", "content": reply})
+                # 4. Save AI Response to Cloud immediately
+                save_message_to_cloud("assistant", reply)
