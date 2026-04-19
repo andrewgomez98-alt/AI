@@ -117,26 +117,21 @@ def save_message_to_cloud(role, content):
 def get_gemini_response(user_text, system_instruction, temp, document_context=""):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
-    contents = []
-
-    # Add history for context
-    for msg in st.session_state.messages:
-        role = "user" if msg["role"] == "user" else "model"
-        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
 
     # Inject document context into the system instructions if a document is uploaded
     if document_context:
         system_instruction += f"\n\n=== UPLOADED DOCUMENT CONTEXT ===\n{document_context}\n================================="
 
-    # Add current instruction and query
-    contents.append({
-        "role": "user", 
-        "parts": [{"text": f"SYSTEM INSTRUCTION: {system_instruction}\n\nUSER: {user_text}"}]
-    })
+    contents = []
+    # Add history for context (this cleanly alternates user/model based on session state)
+    for msg in st.session_state.messages:
+        role = "user" if msg["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": msg["content"]}]})
 
+    # Send the system instruction cleanly in its own dedicated field
     payload = {
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
         "contents": contents,
-        # Max Output Tokens significantly increased here to prevent mid-sentence cut-offs
         "generationConfig": {"temperature": temp, "maxOutputTokens": 8192} 
     }
 
@@ -183,7 +178,7 @@ st.title("💠 Agent Neural Link")
 st.markdown(f"""
     <div class='portal-card'>
         <b>Active Session:</b> {st.session_state.session_id}<br>
-        <b>Memory Protocol:</b> Atomic Row Storage
+        <b>Memory Protocol:</b> Atomic Row Storage (Character Limit Fix Active)
     </div>
     """, unsafe_allow_html=True)
 
@@ -200,4 +195,17 @@ if user_query:
     with st.chat_message("user"):
         st.markdown(user_query)
 
-    # 2. Save User
+    # 2. Save User Message to Cloud immediately
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    save_message_to_cloud("user", user_query)
+
+    # 3. Get and Display AI Response (Passing the document context)
+    with st.chat_message("assistant"):
+        with st.spinner("Processing through Neural Layers..."):
+            reply = get_gemini_response(user_query, sys_prompt, temp, document_context=doc_text)
+            st.markdown(reply)
+
+            if "NEURAL ERROR" not in reply:
+                st.session_state.messages.append({"role": "assistant", "content": reply})
+                # 4. Save AI Response to Cloud immediately
+                save_message_to_cloud("assistant", reply)
